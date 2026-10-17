@@ -497,6 +497,17 @@ code.de { font: 600 .95em var(--serif); background: var(--accent-soft); color: v
 .fix.good { color: var(--green); background: var(--green-soft); }
 .fix.bad { background: var(--gold-soft); }
 .fix.bad b { font-family: var(--serif); font-size: 15px; }
+.fix.bad { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.fix-head { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: color-mix(in srgb, var(--gold) 70%, var(--ink)); }
+.fix-corrected, .fix-natural { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fix-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.fix-list s { color: var(--red); font-family: var(--serif); }
+.fix-list .chip { font-size: 10.5px; padding: 1px 7px; }
+.fix-list .muted { font-size: 13px; margin-top: 2px; }
+.fix .btn.icon { padding: 3px; }
+.chat-err { background: transparent; color: inherit; text-decoration: underline wavy var(--gold); text-underline-offset: 4px; }
+.chat-err sup { font: 700 9px var(--sans); margin-left: 1px; }
+.chat-summary { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: -4px 0 10px; font-size: 13px; }
 .composer { display: flex; gap: 10px; align-items: flex-end; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
 .composer textarea { flex: 1; border: 0; outline: none; resize: none; background: transparent; font: 400 17px/1.5 var(--serif); max-height: 140px; padding: 8px 6px; }
 .typing { display: inline-flex; gap: 4px; padding: 16px; }

@@ -115,26 +115,49 @@ export const SCENARIOS = [
   { id: "wohnung", label: "Wohnungssuche", prompt: "you are a landlord showing a flat; the learner asks questions about rent, rooms, move-in date" },
 ];
 
+export const CHAT_MISTAKE_TYPES = ["Satzbau", "Verbform", "Zeitform", "Pronomen", "Artikel/Genus", "Kasus", "Adjektivendung", "Präposition", "Wortwahl", "Rechtschreibung"];
+
 const CHAT_SCHEMA = obj({
   reply_de: { ...str, description: "Your reply in German, in role. 1-3 short sentences, ending with a question that keeps the conversation going." },
   reply_en: { ...str, description: "English translation of reply_de" },
-  has_mistake: { type: "boolean", description: "true if the learner's last message had a grammar, spelling or word-choice mistake" },
-  corrected: { ...str, description: "Learner's last message rewritten in correct, natural German (empty string if none or no mistakes)" },
-  explanation_en: { ...str, description: "If has_mistake: one or two short English sentences explaining the main mistake(s). Otherwise empty string." },
+  mistakes: {
+    type: "array",
+    description: "EVERY mistake in the learner's last message, in order of appearance (empty array if there are none)",
+    items: obj({
+      wrong: { ...str, description: "The wrong fragment, copied verbatim from the learner's message (a few words)" },
+      right: { ...str, description: "The corrected fragment" },
+      type: { type: "string", enum: CHAT_MISTAKE_TYPES, description: "Satzbau = word order/sentence structure; Verbform = conjugation; Zeitform = tense/haben-sein; Wortwahl = wrong or unnatural word" },
+      explanation: { ...str, description: "One short English sentence naming the rule (e.g. 'In a main clause the conjugated verb comes second.')" },
+    }),
+  },
+  corrected: { ...str, description: "The learner's whole last message with only the mistakes fixed (empty string if there are no mistakes)" },
+  natural: { ...str, description: "How a native speaker would naturally say the same thing, if clearly different from 'corrected' (also when the message was grammatical but sounded unnatural); else empty string" },
 });
 
 /** history: [{ role: "user"|"assistant", content: string }] (assistant content = reply_de only). */
-export function chatTurn(history, scenarioId, level) {
+export async function chatTurn(history, scenarioId, level) {
   const sc = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
-  return ask({
-    system: `You are a warm, encouraging German conversation partner for a learner at ${level}. Role-play: ${sc.prompt}.
+  const r = await ask({
+    effort: "medium",
+    system: `You are a warm, encouraging German conversation partner and a precise German teacher for a learner at ${level}. Role-play: ${sc.prompt}.
 Speak only German in reply_de, strictly at the learner's level: ${LEVEL_HINT[level]}
 Keep replies short (1-3 sentences) and always end by asking something, so the learner has to answer.
-The learner may type or speak (speech-to-text): ignore missing punctuation/capitalisation caused by dictation, but do correct real grammar, word order, gender/case and vocabulary mistakes.
-If the learner writes in English or asks for help, help briefly and continue in German.`,
+
+Correct the learner's LAST message thoroughly, like a good teacher. Check every sentence for:
+- sentence structure and word order: conjugated verb in position 2 in main clauses, verb at the end after weil/dass/wenn/ob, separable verbs (ich stehe … auf), modal verb + infinitive at the end, Perfekt participle at the end;
+- verb forms and tenses: conjugation (ich gehe, er geht), haben vs. sein in the Perfekt, correct participles, the right tense for the meaning;
+- pronouns: right person and case (ich/mich/mir, er/ihn/ihm, sie/ihr), du vs. Sie used consistently;
+- articles and gender (der/die/das, ein/eine), case after verbs and prepositions (den/dem), adjective endings;
+- prepositions and word choice: wrong or unnatural words, anglicisms, literal translations from English or Italian.
+List every real mistake separately in "mistakes" (don't merge several into one). If the message is grammatical but sounds unnatural, give a "natural" version (and a Wortwahl item only if a word is actually wrong).
+The learner may type or speak (speech-to-text): ignore missing punctuation and capitalisation caused by dictation. Don't invent mistakes: correct German gets an empty "mistakes" list.
+If the learner writes in English or asks for help, help briefly in reply_de and continue in German.`,
     messages: history,
     schema: CHAT_SCHEMA,
   });
+  r.mistakes = r.mistakes.filter((m) => m.wrong && m.right && m.wrong.trim() !== m.right.trim());
+  r.has_mistake = r.mistakes.length > 0;
+  return r;
 }
 
 // ------------------------------------------------------------ 6. check one written sentence

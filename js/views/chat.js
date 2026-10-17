@@ -22,6 +22,7 @@ export function render(root) {
       <label class="toggle"><input type="checkbox" id="auto" ${S.settings.autoSpeakChat ? "checked" : ""}> Read replies aloud</label>
     </div>
     <div class="scenarios" id="sc">${ai.SCENARIOS.map((s) => `<button data-id="${s.id}" class="${s.id === state.scenario ? "on" : ""}">${esc(s.label)}</button>`).join("")}</div>
+    <div class="chat-summary hidden" id="summary"></div>
     <div class="chat-log" id="log"></div>
     <div class="composer">
       <button class="btn icon ghost" id="mic" title="Speak" ${canRecognize ? "" : "disabled"}>${icon("mic")}</button>
@@ -42,15 +43,27 @@ export function render(root) {
         <div class="en hidden">${esc(it.en)}</div>
       </div>` : `
       <div class="msg me" data-i="${i}">
-        <div class="bubble">${esc(it.text)}</div>
-        ${it.fix ? (it.fix.ok ? `<div class="fix good">${icon("check")} Richtig!</div>` : `<div class="fix bad"><div>Better: <b>${esc(it.fix.corrected)}</b></div><div class="muted" style="margin-top:4px">${esc(it.fix.why)}</div></div>`) : ""}
+        <div class="bubble">${it.fix ? markMistakes(it.text, it.fix.mistakes) : esc(it.text)}</div>
+        ${it.fix ? fixHTML(it.fix) : ""}
       </div>`).join("") + (pending ? `<div class="msg bot"><div class="bubble typing"><span></span><span></span><span></span></div></div>` : "");
+    drawSummary();
     log.scrollTop = log.scrollHeight;
   };
+
+  // mistakes of this conversation by type, so patterns become visible
+  function drawSummary() {
+    const counts = {};
+    for (const it of state.items) for (const m of it.fix?.mistakes || []) counts[m.type] = (counts[m.type] || 0) + 1;
+    const el = $("#summary");
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    el.classList.toggle("hidden", !entries.length);
+    el.innerHTML = entries.length ? `<span class="subtle">Your mistakes in this conversation:</span> ${entries.map(([t, n]) => `<span class="chip">${esc(t)} · ${n}</span>`).join(" ")}` : "";
+  }
 
   attachWordClicks(log, (el) => { const it = state.items[el.closest(".msg").dataset.i]; return { sentence: it.de, translation: it.en }; });
   log.addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]"); if (!b) return;
+    if (b.dataset.act === "say-text") { speak(b.dataset.text); return; }
     const it = state.items[b.closest(".msg").dataset.i];
     if (b.dataset.act === "say") speak(it.de);
     if (b.dataset.act === "en") b.closest(".msg").querySelector(".en").classList.toggle("hidden");
@@ -62,7 +75,7 @@ export function render(root) {
       const r = await ai.chatTurn(state.history, state.scenario, S.level);
       if (userText) {
         const me = [...state.items].reverse().find((x) => x.role === "me");
-        if (me) me.fix = r.has_mistake && r.corrected ? { ok: false, corrected: r.corrected, why: r.explanation_en } : { ok: true };
+        if (me) me.fix = { mistakes: r.mistakes, corrected: r.has_mistake ? r.corrected : "", natural: r.natural };
       }
       state.history.push({ role: "assistant", content: r.reply_de });
       state.items.push({ role: "bot", de: r.reply_de, en: r.reply_en });
@@ -120,4 +133,32 @@ export function render(root) {
 
   if (!state.items.length) start(); else draw();
   return () => { stopAll(); rec?.stop(); closeWord(); };
+}
+
+/** The learner's message with each wrong fragment underlined and numbered. */
+function markMistakes(text, mistakes = []) {
+  let html = esc(text);
+  mistakes.forEach((m, i) => {
+    const w = esc(m.wrong);
+    const at = html.indexOf(w);
+    if (w && at >= 0) html = html.slice(0, at) + `<mark class="chat-err">${w}<sup>${i + 1}</sup></mark>` + html.slice(at + w.length);
+  });
+  return html;
+}
+
+function fixHTML(fix) {
+  const say = (text) => `<button class="btn sm ghost icon" data-act="say-text" data-text="${esc(text)}" title="Listen">${icon("volume")}</button>`;
+  if (!fix.mistakes.length) {
+    return fix.natural
+      ? `<div class="fix good">${icon("check")} Correct! More natural: <b class="serif">${esc(fix.natural)}</b> ${say(fix.natural)}</div>`
+      : `<div class="fix good">${icon("check")} Richtig!</div>`;
+  }
+  return `<div class="fix bad">
+    <div class="fix-head">Korrektur · ${fix.mistakes.length} mistake${fix.mistakes.length === 1 ? "" : "s"}</div>
+    ${fix.corrected ? `<div class="fix-corrected"><b class="serif">${esc(fix.corrected)}</b> ${say(fix.corrected)}</div>` : ""}
+    <ol class="fix-list">${fix.mistakes.map((m) => `<li>
+      <span class="chip">${esc(m.type)}</span> <s>${esc(m.wrong)}</s> → <b class="serif">${esc(m.right)}</b>
+      <div class="muted">${esc(m.explanation)}</div></li>`).join("")}</ol>
+    ${fix.natural && fix.natural !== fix.corrected ? `<div class="fix-natural">More natural: <b class="serif">${esc(fix.natural)}</b> ${say(fix.natural)}</div>` : ""}
+  </div>`;
 }
