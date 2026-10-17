@@ -11,11 +11,10 @@ const prefs = { showEn: false, hideText: false };
 export function render(root, id) {
   const t = textById(id);
   if (!t) { root.innerHTML = `<div class="page empty"><div class="big">🤷</div>Text not found. <a href="#/library">Back to the library</a></div>`; return; }
-  let playing = false;
 
   const sentHTML = (s, pi, si) => {
     const tr = s.en ? `<span class="tr ${prefs.showEn ? "" : "hidden"}">${esc(s.en)}</span>` : `<span class="tr hidden"></span>`;
-    return `<span class="sent" data-p="${pi}" data-s="${si}">${wordsHTML(s.de)}<span class="sent-actions"><button data-act="say" title="Listen">${icon("volume")}</button><button data-act="tr" title="Translation">${icon("translate")}</button></span>${tr}</span>`;
+    return `<span class="sent" data-p="${pi}" data-s="${si}">${wordsHTML(s.de)}<span class="sent-actions"><button data-act="from" title="Read aloud from this sentence">${icon("play")}</button><button data-act="say" title="Listen to this sentence">${icon("volume")}</button><button data-act="tr" title="Translation">${icon("translate")}</button></span>${tr}</span>`;
   };
   const body = t.paragraphs.map((p, pi) => t.kind === "dialogue"
     ? `<div class="para dialogue">${p.map((s, si) => `<div class="turn ${esc(s.speaker || "")}"><div class="who">${esc(t.speakers?.[s.speaker] || s.speaker || "")}</div><div>${sentHTML(s, pi, si)}</div></div>`).join("")}</div>`
@@ -35,7 +34,7 @@ export function render(root, id) {
       <div class="row" style="margin-top:12px">${levelChip(t.level)}<span class="chip">${esc(t.topic || "")}</span><span class="chip">${t.words || ""} words</span><span class="chip" id="cov"></span></div>
     </div>
     <div class="reader-bar">
-      <button class="btn sm primary" id="play">${icon("play")} Read aloud</button>
+      <span class="player" id="player"></span>
       <button class="btn sm ${prefs.showEn ? "on" : ""}" id="en">${icon("translate")} ${prefs.showEn ? "Hide" : "Show"} translation</button>
       <button class="btn sm" id="hide" title="Listening practice: blur the text">${icon(prefs.hideText ? "eye" : "eyeOff")} ${prefs.hideText ? "Show text" : "Hide text"}</button>
       <span class="spacer"></span>
@@ -78,7 +77,8 @@ export function render(root, id) {
     e.stopPropagation();
     const sEl = b.closest(".sent");
     const s = sentOf(b);
-    if (b.dataset.act === "say") { stopAll(); speak(s.de); return; }
+    if (b.dataset.act === "from") { playFrom(sents().indexOf(sEl)); return; }
+    if (b.dataset.act === "say") { if (player.state === "playing") pause(); stopAll(); speak(s.de); return; }
     const tr = sEl.querySelector(".tr");
     if (tr.textContent) { tr.classList.toggle("hidden"); return; }
     if (!ai.hasKey()) { toast("No built-in translation. Set up an AI provider in Settings to translate."); return; }
@@ -91,23 +91,83 @@ export function render(root, id) {
     b.disabled = false; b.innerHTML = icon("translate");
   });
 
-  // read aloud with sentence highlighting
-  $("#play").onclick = async () => {
-    if (playing) { playing = false; stopAll(); return; }
-    playing = true;
-    $("#play").innerHTML = `${icon("stop")} Stop`;
-    const sents = [...bodyEl.querySelectorAll(".sent")];
-    for (const el of sents) {
-      if (!playing) break;
-      sents.forEach((x) => x.classList.remove("playing"));
-      el.classList.add("playing");
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
-      await speak(sentOf(el).de);
+  // ---- read aloud, sentence by sentence. Pause keeps the position (also saved per text,
+  // so it survives leaving the page); Resume restarts the paused sentence and goes on.
+  // (speechSynthesis.pause() is unreliable in Chrome, especially on Android, so pausing
+  // cancels the current utterance and resuming speaks that sentence again.)
+  S.readPos ||= {};
+  const sents = () => [...bodyEl.querySelectorAll(".sent")];
+  const player = { state: S.readPos[t.id] ? "paused" : "idle", index: S.readPos[t.id] || 0, run: 0 };
+  const mark = (i, cls) => sents().forEach((x, k) => { x.classList.toggle("playing", cls === "playing" && k === i); x.classList.toggle("paused", cls === "paused" && k === i); });
+  const savePos = () => { if (player.index > 0) S.readPos[t.id] = player.index; else delete S.readPos[t.id]; changed(); };
+
+  function drawPlayer() {
+    const n = sents().length, pos = `${Math.min(player.index + 1, n)} / ${n}`;
+    $("#player").innerHTML = player.state === "playing"
+      ? `<button class="btn sm primary" id="pp" title="Pause (Space)">${icon("pause")} Pause</button>
+         <button class="btn sm icon" id="restart" title="Stop and go back to the start">${icon("stop")}</button>
+         <span class="subtle player-pos">Satz ${pos}</span>`
+      : player.state === "paused"
+        ? `<button class="btn sm primary" id="pp" title="Resume (Space)">${icon("play")} Resume</button>
+           <button class="btn sm icon" id="restart" title="Start again from the beginning">${icon("replay")}</button>
+           <span class="subtle player-pos">Paused at sentence ${pos}</span>`
+        : `<button class="btn sm primary" id="pp" title="Read aloud (Space)">${icon("play")} Read aloud</button>`;
+    $("#pp").onclick = () => (player.state === "playing" ? pause() : playFrom(player.index));
+    $("#restart")?.addEventListener("click", restart);
+  }
+
+  async function playFrom(i) {
+    const run = ++player.run;
+    stopAll();
+    player.state = "playing";
+    player.index = Math.max(0, i);
+    drawPlayer();
+    const list = sents();
+    while (player.index < list.length) {
+      mark(player.index, "playing");
+      list[player.index].scrollIntoView({ block: "center", behavior: "smooth" });
+      await speak(sentOf(list[player.index]).de);
+      if (run !== player.run) return; // paused, restarted or left the page meanwhile
+      player.index++;
+      savePos();
+      if (player.index < list.length) drawPlayer();
     }
-    sents.forEach((x) => x.classList.remove("playing"));
-    playing = false;
-    $("#play").innerHTML = `${icon("play")} Read aloud`;
+    // reached the end
+    player.state = "idle";
+    player.index = 0;
+    savePos();
+    mark(-1);
+    drawPlayer();
+  }
+
+  function pause() {
+    player.run++;
+    stopAll();
+    player.state = "paused";
+    savePos();
+    mark(player.index, "paused");
+    drawPlayer();
+  }
+
+  function restart() {
+    player.run++;
+    stopAll();
+    player.state = "idle";
+    player.index = 0;
+    savePos();
+    mark(-1);
+    drawPlayer();
+  }
+
+  drawPlayer();
+  if (player.state === "paused") mark(player.index, "paused");
+
+  const onKey = (e) => {
+    if (e.key !== " " || e.target.closest("input, textarea, button, select, [contenteditable]")) return;
+    e.preventDefault();
+    player.state === "playing" ? pause() : playFrom(player.index);
   };
+  document.addEventListener("keydown", onKey);
 
   $("#en").onclick = () => {
     prefs.showEn = !prefs.showEn;
@@ -149,7 +209,7 @@ export function render(root, id) {
 
   renderQuiz($("#quiz"), t);
 
-  return () => { playing = false; stopAll(); unsub(); closeWord(); };
+  return () => { player.run++; stopAll(); document.removeEventListener("keydown", onKey); unsub(); closeWord(); };
 }
 
 function renderQuiz(box, t) {

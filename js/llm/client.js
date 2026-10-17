@@ -176,7 +176,8 @@ async function openaiFetch(c, path, body) {
 
 function friendly(status, c, detail) {
   const why = detail ? ` (${c.provider.short} says: ${String(detail).slice(0, 220)})` : "";
-  if (status === 401 || status === 403) return `${c.provider.name} rejected the API key.${why} Check it in Settings.`;
+  // Gemini reports a bad key as 400 "API key not valid" / "Please pass a valid API key"
+  if (status === 401 || status === 403 || /api[ _-]?key|auth/i.test(String(detail))) return `${c.provider.name} rejected the API key.${why} Check it in Settings.`;
   if (status === 404) return `${c.provider.name} doesn't offer the model "${c.model}" to this key.${why} Pick another one with "Load models" in Settings.`;
   if (status === 429) return `${c.provider.name}: rate limit or quota reached.${why} Wait a moment, or check your plan/credits.`;
   if (status >= 500) return `${c.provider.name} is overloaded or having trouble right now.${why} Try again in a minute, or pick another model in Settings.`;
@@ -210,11 +211,11 @@ async function openaiComplete(c, { system, messages, schema }) {
       return choice.message?.content ?? "";
     } catch (e) {
       // provider/model doesn't support this response_format: degrade and retry
-      if (schema && (e.status === 400 || e.status === 422) && mode !== "prompt") {
+      if (schema && (e.status === 400 || e.status === 422) && mode !== "prompt" && !/rejected the API key/.test(e.message)) {
         mode = mode === "schema" ? "object" : "prompt";
         continue;
       }
-      if (schema && e.status === 400) e.message += " This model may not support the structured answers the app needs; try another model in Settings.";
+      if (schema && e.status === 400 && !/rejected the API key/.test(e.message)) e.message += " This model may not support the structured answers the app needs; try another model in Settings.";
       throw e;
     }
   }

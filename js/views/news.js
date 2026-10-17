@@ -55,9 +55,16 @@ export function renderNews(root) {
       <a class="btn primary" href="#/settings">${icon("key")} Add API key</a></div>`;
   } else if (day) {
     box.innerHTML = `<div class="news-grid">${day.texts.map(card).join("")}</div>`;
-  } else {
-    if (!job.promise && !(job.error && job.key === key)) start(root, key);
+  } else if (job.promise || (job.error && job.key === key)) {
     drawProgress(box, root, key);
+  } else {
+    // Nothing happens until the learner decides to spend an API call on today's news.
+    box.innerHTML = `<div class="card stack news-start" style="align-items:flex-start">
+      <h2>📰 Today's news isn't loaded yet</h2>
+      <p class="muted">When you click the button, ${esc(ai.aiName())} finds today's most relevant news (Italy, Germany, Europe, AI) and writes three easy German texts about it. It takes about one to two minutes and uses your API key (roughly 20–40 cents with Claude Opus 5.5, a few cents with small models). Nothing is fetched until you click.</p>
+      <button class="btn primary lg" id="fetch">${icon("sparkle")} Get today's news</button>
+    </div>`;
+    box.querySelector("#fetch").onclick = () => { start(root, key); renderNews(root); };
   }
 
   const again = root.querySelector("#again");

@@ -298,6 +298,9 @@ kbd { font: 600 11px var(--sans); padding: 2px 6px; border-radius: 5px; border: 
 .turn.B .who { color: var(--accent); }
 .sent { border-radius: 6px; transition: background .2s; position: relative; }
 .sent.playing { background: var(--gold-soft); box-shadow: 0 0 0 4px var(--gold-soft); }
+.sent.paused { background: var(--accent-soft); box-shadow: 0 0 0 4px var(--accent-soft); }
+.player { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.player-pos { white-space: nowrap; }
 .sent .tr { display: block; font: 400 15px/1.5 var(--sans); color: var(--ink-3); margin: 2px 0 8px; }
 .sent-actions { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 4px; opacity: 0; transition: opacity .15s; }
 .sent:hover .sent-actions, .sent-actions:focus-within { opacity: 1; }

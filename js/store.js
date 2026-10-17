@@ -17,6 +17,7 @@ const DEFAULTS = () => ({
   grammar: {},          // chapterId -> { read, best, total, at }
   news: {},             // "YYYY-MM-DD" -> { at, texts } daily news written by the AI
   userDict: { lemmas: {}, forms: {} }, // words missing from the offline dictionary, saved from AI explanations
+  readPos: {},          // textId -> sentence index where read-aloud was paused
   stats: {},            // "YYYY-MM-DD" -> { reviews, dictation, speak, read, chat }
   settings: {
     provider: "anthropic", // see js/llm/providers.js

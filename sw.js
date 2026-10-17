@@ -7,7 +7,7 @@
 //   (Audio uses range requests, which don't mix well with cached responses; offline, the app
 //   falls back to the built-in text-to-speech voice.)
 
-const VERSION = "20261004-152014";
+const VERSION = "20261017-072510";
 const CACHE = `wortwerk-${VERSION}`;
 const RUNTIME = "wortwerk-runtime";
 const PRECACHE = [
