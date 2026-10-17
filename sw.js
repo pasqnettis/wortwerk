@@ -7,7 +7,7 @@
 //   (Audio uses range requests, which don't mix well with cached responses; offline, the app
 //   falls back to the built-in text-to-speech voice.)
 
-const VERSION = "20261017-072510";
+const VERSION = "20261017-072840";
 const CACHE = `wortwerk-${VERSION}`;
 const RUNTIME = "wortwerk-runtime";
 const PRECACHE = [
@@ -73,10 +73,15 @@ const isAppCode = (url) => url.origin === self.location.origin && !url.pathname.
 const isLocalAsset = (url) => url.origin === self.location.origin;
 const isRuntimeCacheable = (url) => /^(fonts\.googleapis\.com|fonts\.gstatic\.com)$/.test(url.hostname);
 
+// GitHub Pages sends "Cache-Control: max-age=600", so plain fetch() could return a
+// 10-minute-old copy from the browser's HTTP cache. cache: "no-cache" always revalidates
+// with the server (a cheap 304 when nothing changed).
+const fresh = (request) => fetch(request.url, { cache: "no-cache", credentials: "same-origin" });
+
 async function networkFirst(request) {
   const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(request);
+    const response = await fresh(request);
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch {
@@ -87,7 +92,7 @@ async function networkFirst(request) {
 async function cacheFirstRefresh(request) {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(request, { ignoreSearch: true });
-  const refresh = fetch(request).then((r) => { if (r.ok) cache.put(request, r.clone()); return r; }).catch(() => null);
+  const refresh = fresh(request).then((r) => { if (r.ok) cache.put(request, r.clone()); return r; }).catch(() => null);
   return cached || (await refresh) || Response.error();
 }
 

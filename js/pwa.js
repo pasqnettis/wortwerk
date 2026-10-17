@@ -9,5 +9,24 @@ window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); inst
 window.addEventListener("appinstalled", () => { install.prompt = null; });
 const isLocalDev = /^(localhost|127\.0\.0\.1|.*\.localhost)$/.test(location.hostname) && !new URLSearchParams(location.search).has("sw");
 if ("serviceWorker" in navigator && !isLocalDev) {
-  navigator.serviceWorker.register("sw.js").catch((e) => console.warn("Service worker not registered:", e));
+  // When an updated service worker takes over, reload once so the new app code is used
+  // right away (not on the first install, when there was no previous worker).
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadController && !reloaded) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+    .then((reg) => reg.update())
+    .catch((e) => console.warn("Service worker not registered:", e));
+}
+
+/** Version of the published site (written by build_site.py), or null in local development. */
+export async function siteVersion() {
+  try {
+    const r = await fetch("version.json", { cache: "no-store" });
+    return r.ok ? (await r.json()).version : null;
+  } catch {
+    return null;
+  }
 }

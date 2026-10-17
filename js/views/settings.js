@@ -4,7 +4,7 @@ import { germanVoices, speak } from "../speech.js";
 import * as ai from "../ai.js";
 import { PROVIDERS } from "../llm/providers.js";
 import { current } from "../llm/client.js";
-import { install, isInstalled } from "../pwa.js";
+import { install, isInstalled, siteVersion } from "../pwa.js";
 
 export function render(root) {
   const voices = germanVoices();
@@ -48,6 +48,7 @@ export function render(root) {
                </ul>
                ${/localhost$|127\.0\.0\.1/.test(location.hostname) ? `<div class="notice">You're using the local copy on this computer. Phones need the hosted (HTTPS) version: see “Put Wortwerk on your phone” in TODO.md / AGENTS.md.</div>` : ""}`}
         <p class="subtle">Your progress is stored separately on each device. Use Export / Import backup below to move it between computer and phone.</p>
+        <p class="subtle" id="app-version"></p>
       </div>
 
       <div class="card stack">
@@ -114,6 +115,10 @@ export function render(root) {
     try { const answer = await ai.testKey(); toast(`✓ ${ai.aiLabel()} answered: ${answer.slice(0, 40)}`); render(root); }
     catch (err) { toast(err.message, "err"); busy(b, false); }
   };
+  siteVersion().then((v) => {
+    const el = $("#app-version");
+    if (el) el.textContent = v ? `App version: ${v.replace(/^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d).*/, "$3.$2.$1 $4:$5")}` : "App version: local development copy";
+  });
   $("#install")?.addEventListener("click", async () => {
     install.prompt.prompt();
     await install.prompt.userChoice;
